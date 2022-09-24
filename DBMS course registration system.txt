@@ -1,0 +1,2322 @@
+﻿users - 
+user stu_1, password stu_1;
+user dean_acads, password dean1234;
+user fac_1, password fac_1;
+
+
+1. psql -U postgres -h localhost
+2. create database - create database Student_Portal
+3. create user - CREATE USER dean_acads WITH ENCRYPTED PASSWORD 'dean1234';
+4. create user - CREATE USER stu_1 WITH ENCRYPTED PASSWORD 'stu_1';
+5. create  faculty - CREATE USER fac_1 WITH ENCRYPTED PASSWORD 'fac_1';
+6. list users - \du
+7. choose your database - \c Student_Portal
+8. list all tables of the database - \dt
+9. grant privileges - GRANT ALL ON course_catalogue TO dean_acads;
+//Also he/she not allowed to register for more than the allowed credit limit (unless his/her tickets are approved). 
+
+
+
+
+users - 
+user stu_1, password stu_1;
+user dean_acads, password dean1234;
+user fac_1, password fac_1;
+
+
+10. psql -U postgres -h localhost
+11. create database - create database Student_Portal
+12. create user - CREATE USER dean_acads WITH ENCRYPTED PASSWORD 'dean1234';
+13. create user - CREATE USER stu_1 WITH ENCRYPTED PASSWORD 'stu_1';
+14. create  faculty - CREATE USER fac_1 WITH ENCRYPTED PASSWORD 'fac_1';
+15. list users - \du
+16. choose your database - \c Student_Portal
+17. list all tables of the database - \dt
+18. grant privileges - GRANT ALL ON course_catalogue TO dean_acads;
+19. to check the privileges on a table - \dp course_catalogue
+20. login as dean_acads user - psql -h localhost -d Student_Portal -U dean_acads 
+21. login as stu_1 - psql -h localhost -d Student_Portal -U stu_1
+22. list table entries - select * from table_name;
+23. grant view(select) for stu_1 on course_catalogue - GRANT SELECT ON course_catalogue TO stu_1;
+24. GRANT VIEW(SELECT) For FAC_1 ON COURSE_CATALOGUE - GRANT SELECT ON course_catalogue TO fac_1;
+25. Faulty can rw - GRANT ALL ON course_offering TO fac_1;
+26. GRANT SELECT ON course_offering TO dean_acads;
+27. GRANT SELECT ON course_offering TO stu_1;
+
+
+
+
+--schema of course_catalogue
+CREATE TABLE course_catalogue(
+        course_id         VARCHAR(6) NOT NULL PRIMARY KEY,
+        L                        INTEGER  NOT NULL,
+        T                        INTEGER  NOT NULL,
+        P                        INTEGER  NOT NULL,
+        S                        INTEGER  NOT NULL,
+        C                        INTEGER  NOT NULL,
+        prereqs                VARCHAR[]        
+);
+
+
+INSERT INTO course_catalogue(course_id, L, T, P, S, C, prereqs) VALUES ('ge111', 3, 1, 0, 3, 3, NULL);
+INSERT INTO course_catalogue(course_id, L, T, P, S, C, prereqs) VALUES ('cs301', 3, 1, 0, 3, 4, ARRAY['cs202', 'cs201']);
+INSERT INTO course_catalogue(course_id, L, T, P, S, C, prereqs) VALUES ('hs202', 3, 1, 0, 3, 3, NULL);
+INSERT INTO course_catalogue(course_id, L, T, P, S, C, prereqs) VALUES ('ge103', 3, 1, 0, 3, 3, ARRAY['cs301', 'cs201']);
+INSERT INTO course_catalogue(course_id, L, T, P, S, C, prereqs) VALUES ('cs302', 3, 1, 0, 3, 4, ARRAY['ge102', 'cs201']);
+
+
+
+
+--procedure for dean_acads to insert in course catalogue
+CREATE PROCEDURE insert_in_catalogue(course_id         VARCHAR(6),
+        L                 INTEGER,
+        T                 INTEGER,
+        P                INTEGER,
+        S                INTEGER,
+        C                INTEGER,
+        prereqs                VARCHAR[])
+LANGUAGE plpgsql
+AS $$
+BEGIN
+INSERT INTO course_catalogue(course_id, L, T, P, S, C, prereqs) VALUES (course_id, L, T, P, S, C, prereqs);
+END
+$$;
+
+
+--calling insert_in_catalogue
+CALL insert_in_catalogue('cs305', 3, 1, 0, 3, 4, ARRAY['cs203', 'cs202']);
+
+
+
+
+--course_offering schema
+
+
+CREATE TABLE course_offering(
+        course_id         VARCHAR(6) NOT NULL,
+        semester    INTEGER  NOT NULL,
+        year        INTEGER  NOT NULL,
+        faculty_id  INTEGER  NOT NULL,
+        time_slot                INTEGER[],
+        batch_list     INTEGER[],
+        constraints            INTEGER,
+        PRIMARY KEY(course_id, semester, year)
+);
+
+
+
+
+
+
+
+
+
+
+--procedure to add to course_offering
+
+
+drop procedure insert_course_offering;
+CREATE OR REPLACE PROCEDURE insert_course_offering(cour_id         VARCHAR(6),
+        semester                    INTEGER,
+        year                        INTEGER,
+        faculty_id                  INTEGER,
+        time_slot                INTEGER[],
+        batch_list     INTEGER[],
+        constraints            INTEGER
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+        IF EXISTS (SELECT cour_id FROM course_catalogue c WHERE cour_id= c.course_id)
+                THEN 
+                IF EXISTS (select * FROM time_table t WHERE t.slot=time_slot)
+                THEN
+                INSERT INTO course_offering(course_id, semester, year, faculty_id , time_slot, batch_list, constraints) VALUES (cour_id, semester, year, faculty_id , time_slot, batch_list, constraints);
+        ELSE raise notice 'The timetable slot could not be found';
+        END IF;
+        ELSE raise notice 'The course % could not be found', cour_id;
+        END IF;
+END;$$
+
+
+--calling insert_course_offering
+
+
+CALL insert_course_offering('ge101', 1, 2021, 20, ARRAY[110, 210, 310], NULL, NULL);
+
+
+ CALL insert_course_offering('hs475', 1, 2021, 1, ARRAY[110, 210, 310], ARRAY[2019, 2018], NULL);
+
+
+CALL insert_course_offering('cs301', 1, 2021, 5, ARRAY[111, 211, 311], ARRAY[2019], NULL);
+
+
+CALL insert_course_offering('cs305', 1, 2021, 1, ARRAY[114,214,314], NULL, NULL);
+
+
+-- create student_table
+
+
+CREATE TABLE student_table(
+        stu_id        VARCHAR(6) NOT NULL PRIMARY KEY,
+        batch INTEGER NOT NULL);
+
+
+
+
+--entering a student in student_table
+ 
+CREATE OR REPLACE PROCEDURE student_entry(student_id         VARCHAR(6),
+        batch                    INTEGER
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+        INSERT INTO student_table(stu_id, batch) VALUES (student_id, batch);
+        EXECUTE format('
+        CREATE TABLE %I(
+                course_id         VARCHAR(6) NOT NULL PRIMARY KEY,
+                semester        INTEGER NOT NULL,
+                year                INTEGER NOT NULL,
+                grade                 INTEGER)', 't_' || student_id);
+        
+        EXECUTE format ('
+        CREATE USER %I WITH ENCRYPTED PASSWORD ''%I''',student_id, 'p_' || student_id);
+        EXECUTE format ('GRANT SELECT ON %I TO %I', 't_' || student_id, student_id);
+        EXECUTE format (‘GRANT INSERT(course_id, semester, year) ON %I TO %I', 't_' || student_id, student_id);
+        EXECUTE format ('GRANT SELECT ON course_offering TO %I', student_id);
+        EXECUTE format ('GRANT SELECT ON course_catalogue TO %I', student_id);
+EXECUTE format ('GRANT SELECT ON tickets_table TO %I', student_id);
+EXECUTE format ('GRANT INSERT(student _id, course_id, sem, year) ON tickets_table TO %I', student_id);
+EXECUTE format ('GRANT SELECT on student_table TO %I',student_id);
+ 
+END;$$
+
+
+
+
+CALL student_entry('ee1221', 2018);
+CALL student_entry('ch1001', 2020);
+CALL student_entry('antara', 2019);
+
+
+
+
+--grant all to dean_academics on student table
+ 
+GRANT ALL ON student_table TO dean_acads;
+
+
+
+
+// create time slot table
+
+
+CREATE TABLE time_table(
+        slot INTEGER[] NOT NULL PRIMARY KEY
+);
+
+
+-- procedure to uploadv time table by dean_acads
+
+
+CREATE PROCEDURE upload_time_slot(slot INTEGER[]
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+        INSERT INTO time_table(slot) VALUES(slot);
+END;$$
+
+
+--grant 
+GRANT ALL ON time_table TO dean_acads;
+
+
+-Call statement - 
+CALL upload_time_slot(ARRAY[114, 214, 314]);
+
+
+--checker
+
+
+CREATE OR REPLACE FUNCTION checker(s_id VARCHAR(6), 
+                                                        sem INTEGER, 
+year INTEGER, 
+this_credit INTEGER)
+RETURNS INTEGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+        bool_val INTEGER;
+        prev_sem1  INTEGER;
+        prev_sem2 INTEGER;
+        prev_year1 INTEGER;
+        prev_year2 INTEGER;
+        sem_credits_record record;
+sem_credits refcursor;
+curr_credits DECIMAL;
+sem_credits_record1 record;
+sem_credits1 refcursor;
+prev_credits1 DECIMAL;
+sem_credits_record2 record;
+sem_credits2 refcursor;
+prev_credits2 DECIMAL;
+ 
+BEGIN
+        IF(sem = 1)
+        THEN prev_sem1 = 2;
+prev_sem2 =1; 
+prev_year1 = year - 1;
+prev_year1 = year - 1;
+ 
+ELSE
+prev_sem1 = 1;
+prev_sem2=2;
+prev_year1 = year;
+prev_year2 = year-1;
+ 
+END IF;
+ 
+curr_credits = 0;
+OPEN sem_credits FOR EXECUTE ('SELECT cc.c
+                FROM ' || quote_ident('t_' || s_id) || ' t, course_catalogue cc
+                WHERE t.course_id = cc.course_id
+and t.semester = sem
+and t.year = year ');
+LOOP
+        fetch sem_credits into sem_credits_record;
+        exit when not found;
+        curr_credits = curr_credits + sem_credits_record.c;
+END LOOP;
+ 
+curr_credits = curr_credits + this_credit;
+ 
+prev_credits1 = 0;
+OPEN sem_credits1 FOR EXECUTE ('SELECT cc.c
+                FROM ' || quote_ident('t_' || s_id) || ' t, course_catalogue cc
+                WHERE t.course_id = cc.course_id
+and t.semester = prev_sem1
+and t.year = prev_year1 ');
+LOOP
+        fetch sem_credits1 into sem_credits_record1;
+        exit when not found;
+        prev_credits1 = prev_credits1 + sem_credits_record1.c;
+END LOOP;
+ 
+ 
+prev_credits2 = 0;
+OPEN sem_credits2 FOR EXECUTE ('SELECT cc.c
+                FROM ' || quote_ident('t_' || s_id) || ' t, course_catalogue cc
+                WHERE t.course_id = cc.course_id
+and t.semester = prev_sem2
+and t.year = prev_year2');
+LOOP
+        fetch sem_credits2 into sem_credits_record2;
+        exit when not found;
+        prev_credits2 = prev_credits2 + sem_credits_record2.c;
+END LOOP;
+ 
+IF(curr_credits >1.25* (prev_credits2 + prev_credits1)/2 )
+THEN
+bool_val = 0;
+ELSE
+bool_val = 1;
+END IF;
+ 
+RETURN bool_val;
+END;
+$$
+ 
+ 
+
+
+
+
+
+
+-- procedure to register students
+drop procedure student_registration;
+ 
+CREATE OR REPLACE PROCEDURE student_registration(
+        cour_id VARCHAR(6),
+        sem         INTEGER,
+        yea                INTEGER
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+        student_id VARCHAR(6);
+        arr VARCHAR[];
+        slot_arr INTEGER[];
+        bat_arr INTEGER[];
+        z INTEGER;
+        x varchar(6);
+        is_present INTEGER;
+        y INTEGER;
+        slot_same INTEGER;
+        stud_table VARCHAR(10);
+        cgpa DECIMAL;
+        credit INTEGER;
+        bool_var INTEGER;
+        bat INTEGER;
+        is_batch INTEGER;
+BEGIN
+ 
+        SELECT current_user INTO student_id;
+        
+        SELECT c.prereqs
+        INTO arr
+        FROM course_catalogue c
+        WHERE c.course_id = cour_id;
+        
+        SELECT co.batch_list
+        INTO bat_arr
+        FROM course_offering co
+        WHERE co.course_id = cour_id
+        and co.semester = sem
+        and co.year = yea;
+        
+        SELECT batch INTO bat FROM student_table s WHERE s.stu_id=student_id;
+ 
+        is_batch = 0;
+        is_present := 0;
+        slot_same := 0;
+        stud_table := 't_' || student_id;
+        
+        cgpa = calculate_cg(student_id);
+        
+        SELECT cc.c INTO credit FROM course_catalogue cc WHERE cc.course_id=cour_id;
+        
+        bool_var = checker(student_id, sem, yea, credit);
+        
+        IF (bat_arr IS NOT NULL)
+        THEN
+        FOREACH z IN ARRAY bat_arr
+                LOOP 
+                IF (z=bat)
+                THEN
+                is_batch = 1;
+                END IF;
+                END LOOP;
+        ELSE
+                is_batch = 1;
+        END IF;
+        
+        IF (arr IS NOT NULL)
+        THEN
+        FOREACH x IN ARRAY arr
+                LOOP 
+                EXECUTE Format ('SELECT count(*) FROM %I as tbl WHERE tbl.course_id= ''%I''', stud_table, x)
+                INTO is_present;
+                END LOOP;
+        END IF;
+ 
+        
+        IF NOT EXISTS(SELECT * FROM course_catalogue cc WHERE cc.course_id=cour_id)
+        THEN
+        raise notice 'The course % is not in course_catalogue', cour_id;
+        ELSE
+        IF EXISTS(SELECT * 
+                          FROM course_offering c 
+                          WHERE c.course_id = cour_id 
+                                          and c.semester = sem
+                                         and c.year = yea)
+                THEN 
+                IF(bool_var = 1)
+                THEN
+                IF (is_batch = 1)
+                THEN
+                IF EXISTS (SELECT * FROM course_offering c 
+                                          WHERE c.course_id = cour_id 
+                                          and c.semester = sem
+                                         and c.year = yea
+                                          and cgpa>=c.constraints)
+                THEN
+                IF (arr IS NOT NULL and is_present = 0)
+                THEN
+                raise notice 'The prerequistes of the course % are not fullfilled', cour_id;
+                ELSE
+                        SELECT time_slot
+                        INTO slot_arr
+                        FROM course_offering c
+                        WHERE c.course_id = cour_id
+                        and c.semester=sem
+                        and c.year=yea;
+                
+                        FOREACH y IN ARRAY slot_arr
+                                LOOP 
+                                EXECUTE Format ('SELECT count(*) 
+                                                                FROM 
+                                                                (SELECT *
+                                                                FROM %I st, course_offering co 
+                                                                WHERE st.course_id=co.course_id
+                                                                and st.semester=co.semester
+                                                                and st.year=co.year) as new_tbl
+                                                                WHERE %s = ANY(new_tbl.time_slot)' 
+                                                                , stud_table, y )
+                                INTO slot_same;
+                                IF (slot_same<>0)
+                                THEN
+                                        EXIT;
+                                END IF;
+                                END LOOP;
+                        
+                        IF (slot_same<>0)
+                        THEN
+                        raise notice 'The time slot cannot be same as of another course already taken';
+                        ELSE
+                        EXECUTE format('INSERT INTO %I(course_id, semester, year) 
+                                                VALUES (''%I'', %s, %s)', 't_' || student_id, cour_id, sem, yea);
+                        END IF;
+                END IF;
+        ELSE
+        raise notice 'CGPA constraint not cleared. CG should be greater than %s', cgpa;
+        END IF;
+        ELSE
+        raise notice 'batch not allowed';
+        END IF;
+        ELSE
+        raise notice 'credit limit exceeded';
+        END IF;
+        ELSE 
+        raise notice 'The course % is not offered in % sem % year', cour_id, sem, yea;
+        END IF; 
+        END IF;
+        
+END;$$
+
+
+
+
+ 
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+-- cgpa calculate procedure
+
+
+DROP PROCEDURE calculate_cg;
+
+
+CREATE OR REPLACE FUNCTION calculate_cg(s_id VARCHAR(6)
+)
+RETURNS DECIMAL
+LANGUAGE plpgsql
+AS $$        
+DECLARE
+        cg DECIMAL;
+BEGIN
+ 
+        EXECUTE format ('
+        SELECT ROUND(((sum(st.grade*cc.c)*1.0)/(sum(cc.c)*1.0))::numeric,2)
+        FROM %I as st, course_catalogue as cc 
+        WHERE cc.course_id=st.course_id and st.grade IS NOT NULL',   't_' || s_id)
+        INTO cg;
+        
+        RAISE NOTICE 'The cgpa of student with student ID % is %', s_id, cg;
+        
+        RETURN cg;
+        
+END;$$
+
+
+
+
+
+
+CALL calculate_cg('ch1001');
+
+
+
+
+
+
+
+
+
+
+-- create table for all the tickets
+
+
+CREATE TABLE tickets_table (
+        student_id        VARCHAR(6) NOT NULL,
+        course_id         VARCHAR(6) NOT NULL,
+        semester                INTEGER  NOT NULL,
+        year                        INTEGER  NOT NULL,
+        approval                VARCHAR(25),
+        PRIMARY KEY(student_id, course_id, semester, year)
+);
+
+
+
+
+
+
+
+
+-- procedure to insert in tickets_table by a student
+CREATE OR REPLACE PROCEDURE insert_ticket(course_id         VARCHAR(6),
+        semester                 INTEGER,
+        year                INTEGER
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+        stu_id VARCHAR(6);
+BEGIN
+        SELECT current_user INTO stu_id;
+        INSERT INTO ticket_table(student_id, course_id, semester, year) VALUES (stu_id, course_id, semester, year);
+END;$$
+
+
+
+
+
+
+--table to keep track of the faculty advisor of the batches
+
+
+CREATE TABLE faculty_advisor(
+        fac_id VARCHAR(6) NOT NULL,
+        batch INTEGER NOT NULL PRIMARY KEY
+);
+
+
+
+
+--insert procedure for faculty advisor
+
+
+CREATE OR REPLACE PROCEDURE insert_fac_advisor(fac_id VARCHAR(6),
+batch INTEGER
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+        INSERT INTO faculty_advisor(fac_id, batch) VALUES (fac_id, batch); 
+END; $$
+
+
+CALL insert_fac_advisor('f1', 2019);
+
+
+
+
+
+
+
+
+
+
+
+
+// create table for all the tickets
+
+
+CREATE TABLE tickets_table (
+        student_id        VARCHAR(6) NOT NULL,
+        course_id         VARCHAR(6) NOT NULL,
+        semester                INTEGER  NOT NULL,
+        year                        INTEGER  NOT NULL,
+        ins_app                 INTEGER,
+fa_app                         INTEGER, 
+dean_app                 INTEGER,
+        PRIMARY KEY(student_id, course_id, semester, year)
+);
+
+
+GRANT UPDATE on tickets_table TO dean_acads;
+
+
+CREATE TABLE faculty_advisor(
+        fac_id VARCHAR(6) NOT NULL,
+        batch INTEGER NOT NULL PRIMARY KEY
+);
+
+
+CREATE OR REPLACE PROCEDURE insert_fac_advisor(fac_id VARCHAR(6),
+batch INTEGER
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+        INSERT INTO faculty_advisor(fac_id, batch) VALUES (fac_id, batch); 
+END; $$
+
+
+
+
+GRANT ALL ON  faculty_advisor TO dean_acads;
+
+
+
+
+
+
+CALL insert_fac_advisor('f1', 2019);
+
+
+
+
+
+
+
+
+
+
+
+
+CREATE OR REPLACE PROCEDURE insert_ticket(course_id         VARCHAR(6),
+        semester                 INTEGER,
+        year                INTEGER
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+        stu_id VARCHAR(6);
+BEGIN
+        SELECT current_user INTO stu_id;
+        INSERT INTO tickets_table (student_id, course_id, semester, year) VALUES (stu_id, course_id, semester, year);
+END;$$
+
+
+
+
+
+
+
+
+
+
+CREATE TABLE dean_tickets_table (
+        student_id        VARCHAR(6) NOT NULL,
+        course_id         VARCHAR(6) NOT NULL,
+        semester                INTEGER  NOT NULL,
+        year                        INTEGER  NOT NULL,
+        credits                         INTEGER NOT NULL, 
+dean_app                 INTEGER,
+        PRIMARY KEY(student_id, course_id, semester, year)
+);
+
+
+CREATE OR REPLACE PROCEDURE insert_fac_advisor(fac_id VARCHAR(6),
+batch INTEGER
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+        INSERT INTO faculty_advisor(fac_id, batch) VALUES (fac_id, batch); 
+END; $$
+
+
+
+
+
+
+
+
+CREATE TABLE faculty_table (
+        faculty_id        VARCHAR(6) NOT NULL PRIMARY KEY
+);
+
+
+
+
+
+
+
+
+CREATE OR REPLACE PROCEDURE faculty_entry (faculty_id         VARCHAR(6) )
+LANGUAGE plpgsql
+AS $$
+BEGIN
+        INSERT INTO faculty_table (faculty_id) VALUES (faculty_id);
+        EXECUTE format('
+        CREATE TABLE %I(
+                student _id                 VARCHAR(6) NOT NULL, 
+                course_id                VARCHAR(6) NOT NULL, 
+                semester                 INTEGER NOT NULL, 
+                year                         INTEGER NOT NULL, 
+                credits                         INTEGER NOT NULL, 
+                if_faculty_advisor         INTEGER NOT NULL, 
+                ins_app                 INTEGER, 
+                PRIMARY KEY(student_id, course_id, semester, year,if_faculty_advisor)', 'f_' || faculty_id);
+        
+        EXECUTE format ('
+        CREATE USER %I WITH ENCRYPTED PASSWORD ''%I''',faculty_id, 'p_' || faculty_id);
+        EXECUTE format ('GRANT SELECT ON %I TO dean_acads', 'f_' || faculty_id);
+        EXECUTE format ('GRANT UPDATE, INSERT ON %I(student_id, course_id, semester, year, credits, if_faculty_advisor, ins_app) TO %I' , 'f_' || faculty_id, faculty_id);
+EXECUTE format ('GRANT SELECT ON %I TO %I' , 'f_' || faculty_id, faculty_id);
+        EXECUTE format ('GRANT SELECT ON course_catalogue TO %I', faculty_id);
+        EXECUTE format ('GRANT SELECT, INSERT ON course_offering TO %I', faculty_id);
+        EXECUTE format ('GRANT UPDATE on tickets_table TO %I', faculty_id);
+        
+        
+ 
+END;$$
+
+
+
+
+
+
+
+
+
+
+CREATE OR REPLACE PROCEDURE insert_in_ftable() 
+LANGUAGE PLPGSQL
+AS $$
+DECLARE
+fac_id VARCHAR(6);
+credit INTEGER;
+        
+BEGIN
+ 
+SELECT faculty_id 
+INTO fac_id
+FROM course_offering c 
+WHERE c.course_id=NEW.course_id 
+and c.semester = NEW.semester 
+and c.year=NEW.year ;
+ 
+SELECT c INTO credit
+FROM course_catalogue cc 
+WHERE cc.course_id=NEW.course_id;
+ 
+ 
+EXECUTE format('INSERT INTO %I(student _id, course_id,  semester, year, credits, if_faculty_advisor,  ins_app) VALUES( NEW.student_id, NEW.course_id, NEW.semester, NEW.year, credit, 0, NULL)', 'f_' || fac_id);
+ 
+END;
+$$
+
+
+
+
+
+
+CREATE OR REPLACE FUNCTION  insert_in_fad_table ()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+        CALL        insert_in_ftable();
+        CALL        insert_in_advisor_table();
+        CALL        insert_in_dean_table();
+END; $$
+
+
+
+
+
+
+CREATE TRIGGER trig_insert_tickets_table 
+   AFTER INSERT
+   ON tickets_table
+   FOR EACH ROW
+   EXECUTE PROCEDURE insert_in_fad_table();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+CREATE OR REPLACE PROCEDURE insert_in_advisor_table() 
+LANGUAGE PLPGSQL
+AS $$
+DECLARE
+advisor_id VARCHAR(6);
+credit INTEGER;
+bat INTEGER;
+is_present INTEGER;
+        
+BEGIN
+
+
+SELECT batch
+INTO bat
+FROM student_table s
+WHERE NEW.student_id = s.stu_id;
+
+
+SELECT faculty_id 
+INTO advisor_id 
+FROM faculty_advisor f
+WHERE f.batch = bat;
+
+
+SELECT c INTO credit
+FROM course_catalogue cc 
+WHERE cc.course_id=NEW.course_id;
+
+
+
+
+EXECUTE format('INSERT INTO %I(student _id, course_id,  semester, year, credits, if_faculty_advisor,  ins_app) VALUES( NEW.student_id, NEW.course_id, NEW.semester, NEW.year, credit, 1, NULL)', 'f_' || advisor_id);
+
+
+END;
+$$
+
+
+
+
+
+
+CREATE TRIGGER trig_insert_ftable 
+   AFTER UPDATE
+   ON tickets_table
+   FOR EACH ROW
+WHEN (OLD.ins_app IS DISTINCT FROM NEW.ins_app)
+   EXECUTE PROCEDURE insert_in_advisor_table();
+
+
+
+
+
+
+CREATE OR REPLACE PROCEDURE insert_in_dean_table() 
+ LANGUAGE PLPGSQL
+AS $$
+DECLARE
+credit INTEGER;
+is_present INTEGER;
+        
+BEGIN
+SELECT c INTO credit
+FROM course_catalogue cc 
+WHERE cc.course_id=NEW.course_id;
+
+
+INSERT INTO dean_tickets_table(student_id, course_id,  semester, year, credits, dean_app) VALUES( NEW.student_id, NEW.course_id, NEW.semester, NEW.year, credit, NULL);
+END;
+$$
+
+
+
+
+
+
+
+
+CREATE TRIGGER trig_insert_adv_table 
+   AFTER UPDATE
+   ON tickets_table
+   FOR EACH ROW
+WHEN (OLD.fa_app IS DISTINCT FROM NEW.fa_app)
+   EXECUTE PROCEDURE insert_in_dean_table();
+
+
+
+
+
+
+
+
+
+
+
+
+CREATE OR REPLACE PROCEDURE generate_transcript(student_id         VARCHAR(6))
+LANGUAGE plpgsql
+AS $$
+ 
+DECLARE
+transcript_record record;
+transcript refcursor;
+        
+BEGIN
+                OPEN transcript FOR EXECUTE ('SELECT t.course_id, t.semester, t.year, cc.c, t.grade 
+                FROM ' || quote_ident('t_' || student_id) || ' t, course_catalogue cc
+                WHERE t.course_id = cc.course_id');
+                LOOP
+                        fetch transcript into transcript_record;
+                        exit when not found;
+                        raise notice '%',transcript_record;
+                END LOOP;
+                CALL calculate_cg(student_id);
+END
+$$;
+ 
+CALL generate_transcript('antara');
+
+
+
+
+
+
+
+
+--import_csv procedure imports the grades with the attributes student_id and their grades
+-- grade_in_student_table procedure writes the grades in the individual student tables. It should be called after the import_csv procedure.
+CREATE OR REPLACE PROCEDURE import_csv(course_id        VARCHAR(6),
+                                                                                semester INTEGER,
+                                                                                year INTEGER,
+                                                                                path_of_file VARCHAR(100))
+LANGUAGE plpgsql
+AS $$
+        
+BEGIN
+EXECUTE format('
+        CREATE TABLE %I(
+                student_id        VARCHAR(6) NOT NULL PRIMARY KEY,
+                grade                 INTEGER NOT NULL)', course_id || '_' || semester || '_' || year);
+                
+EXECUTE FORMAT('COPY %I(student_id, grade)
+FROM ''' || path_of_file || '''
+DELIMITER '',''
+CSV HEADER', course_id || '_' || semester || '_' || year);
+ 
+ 
+END
+$$;
+ 
+CALL import_csv('hs475',1,2021,'C:\Users\Public\folder\myfile.csv');
+
+
+
+
+
+
+
+
+-- update_on_dean procedure is used to update the deans approval in the dean_ticcket_table and also in the dean column of the tickets_table
+
+
+CREATE OR REPLACE PROCEDURE update_on_dean(s_id VARCHAR(6), 
+c_id VARCHAR(6), 
+sem INTEGER, 
+year INTEGER,
+approval INTEGER)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+        UPDATE dean_tickets_table d
+        SET dean_app = approval
+WHERE d.student_id = s_id and
+d.course_id = c_id and
+d.semester = sem and
+d.year = year;
+
+
+UPDATE tickets_table tb
+        SET dean_app = approval
+WHERE tb.student_id = s_id and
+tb.course_id = c_id and
+tb.semester = sem and
+tb.year = year;
+
+
+IF (approval = 1)
+THEN
+        EXECUTE format('INSERT INTO %I(course_id, semester, year) 
+            VALUES (''%I'', %s, %s)', 't_' || s_id, c_id, sem, yea);
+END IF;
+
+
+END; $$
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+-- update_on_facultyprocedure is used to update the faculty approval in the ‘f_facultyid’ ticket table and also in the ins/fac column of the tickets_table
+
+
+
+
+CREATE OR REPLACE PROCEDURE update_on_faculty(s_id VARCHAR(6), 
+c_id VARCHAR(6), 
+sem INTEGER, 
+year INTEGER,
+approval INTEGER)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+        faculty_id VARCHAR(6);
+    faculty_table VARCHAR(10);
+BEGIN
+        SELECT current_user INTO faculty_id;
+        faculty_table := 'f_' || faculty_id;
+        EXECUTE format ('UPDATE %I d
+                                        SET ins_app = approval
+                             WHERE d.student_id = s_id and
+                           d.course_id = c_id and
+                           d.semester = sem and
+                           d.year = year', faculty_table);
+        EXECUTE format ('UPDATE %I d
+                                        SET ins_app = approval
+                            WHERE d.student_id = s_id and
+                           d.course_id = c_id and
+                           d.semester = sem and
+                           d.year = year', faculty_table);
+ 
+        IF EXISTS(SELECT * FROM faculty_table f
+                                WHERE f.if_faculty_advisor=0 and
+                                f.faculty_id = faculty_id and
+                                f.student_id =s_id and
+                                f.semester = sem and
+                                f.year= year)
+        THEN
+        UPDATE tickets_table tb
+        SET ins_app = approval
+                WHERE tb.student_id = s_id and
+                tb.course_id = c_id and
+                tb.semester = sem and
+                tb.year = year;
+        END IF;
+        IF EXISTS(SELECT * FROM faculty_table f
+                                WHERE f.if_faculty_advisor=1 and
+                                f.faculty_id = faculty_id and
+                                f.student_id =s_id and
+                                f.semester = sem and
+                                f.year= year)
+THEN
+        UPDATE tickets_table tb
+        SET fa_app= approval
+                WHERE tb.student_id = s_id and
+                tb.course_id = c_id and
+                tb.semester = sem and
+                tb.year = year;
+        END IF;
+ 
+END; $$
+
+
+
+
+
+
+-- grade_in_student_table procedure writes the grades in the individual student tables. It should be called after the import_csv procedure.
+CREATE OR REPLACE PROCEDURE grade_in_student_table(cour_id        VARCHAR(6),
+                                                semester INTEGER,
+                                                year INTEGER)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+grade_record  record;
+grades refcursor;
+stud_table VARCHAR(10);
+BEGIN
+        OPEN grades FOR EXECUTE ('SELECT * FROM ' || quote_ident(cour_id || '_' || semester || '_' || year));
+        LOOP
+                fetch grades into grade_record ;
+                exit when not found;
+                stud_table := 't_' || grade_record.student_id;
+                EXECUTE format ('UPDATE %I s
+                SET grade = %s
+                WHERE  s.course_id = ''%I''
+                and s.semester = %s
+                and s.year = %s', stud_table,grade_record.grade,cour_id,semester,year);
+
+
+        END LOOP;
+END
+$$;
+
+
+
+
+call grade_in_student_table('hs475', 1, 2021);
+
+
+
+
+
+
+
+
+
+
+28. 29. login as dean_acads user - psql -h localhost -d Student_Portal -U dean_acads 
+30. login as stu_1 - psql -h localhost -d Student_Portal -U stu_1
+31. list table entries - select * from table_name;
+32. grant view(select) for stu_1 on course_catalogue - GRANT SELECT ON course_catalogue TO stu_1;
+33. GRANT VIEW(SELECT) For FAC_1 ON COURSE_CATALOGUE - GRANT SELECT ON course_catalogue TO fac_1;
+34. Faulty can rw - GRANT ALL ON course_offering TO fac_1;
+35. GRANT SELECT ON course_offering TO dean_acads;
+36. GRANT SELECT ON course_offering TO stu_1;
+
+
+
+
+--schema of course_catalogue
+CREATE TABLE course_catalogue(
+        course_id         VARCHAR(6) NOT NULL PRIMARY KEY,
+        L                        INTEGER  NOT NULL,
+        T                        INTEGER  NOT NULL,
+        P                        INTEGER  NOT NULL,
+        S                        INTEGER  NOT NULL,
+        C                        INTEGER  NOT NULL,
+        prereqs                VARCHAR[]        
+);
+
+
+INSERT INTO course_catalogue(course_id, L, T, P, S, C, prereqs) VALUES ('ge111', 3, 1, 0, 3, 3, NULL);
+INSERT INTO course_catalogue(course_id, L, T, P, S, C, prereqs) VALUES ('cs301', 3, 1, 0, 3, 4, ARRAY['cs202', 'cs201']);
+INSERT INTO course_catalogue(course_id, L, T, P, S, C, prereqs) VALUES ('hs202', 3, 1, 0, 3, 3, NULL);
+INSERT INTO course_catalogue(course_id, L, T, P, S, C, prereqs) VALUES ('ge103', 3, 1, 0, 3, 3, ARRAY['cs301', 'cs201']);
+INSERT INTO course_catalogue(course_id, L, T, P, S, C, prereqs) VALUES ('cs302', 3, 1, 0, 3, 4, ARRAY['ge102', 'cs201']);
+
+
+
+
+--procedure for dean_acads to insert in course catalogue
+CREATE PROCEDURE insert_in_catalogue(course_id         VARCHAR(6),
+        L                 INTEGER,
+        T                 INTEGER,
+        P                INTEGER,
+        S                INTEGER,
+        C                INTEGER,
+        prereqs                VARCHAR[])
+LANGUAGE plpgsql
+AS $$
+BEGIN
+INSERT INTO course_catalogue(course_id, L, T, P, S, C, prereqs) VALUES (course_id, L, T, P, S, C, prereqs);
+END
+$$;
+
+
+--calling insert_in_catalogue
+CALL insert_in_catalogue('cs305', 3, 1, 0, 3, 4, ARRAY['cs203', 'cs202']);
+
+
+
+
+--course_offering schema
+
+
+CREATE TABLE course_offering(
+        course_id         VARCHAR(6) NOT NULL,
+        semester    INTEGER  NOT NULL,
+        year        INTEGER  NOT NULL,
+        faculty_id  INTEGER  NOT NULL,
+        time_slot                INTEGER[],
+        batch_list     INTEGER[],
+        constraints            INTEGER,
+        PRIMARY KEY(course_id, semester, year)
+);
+
+
+
+
+
+
+
+
+
+
+--procedure to add to course_offering
+
+
+drop procedure insert_course_offering;
+CREATE OR REPLACE PROCEDURE insert_course_offering(cour_id         VARCHAR(6),
+        semester                    INTEGER,
+        year                        INTEGER,
+        faculty_id                  INTEGER,
+        time_slot                INTEGER[],
+        batch_list     INTEGER[],
+        constraints            INTEGER
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+        IF EXISTS (SELECT cour_id FROM course_catalogue c WHERE cour_id= c.course_id)
+                THEN 
+                IF EXISTS (select * FROM time_table t WHERE t.slot=time_slot)
+                THEN
+                INSERT INTO course_offering(course_id, semester, year, faculty_id , time_slot, batch_list, constraints) VALUES (cour_id, semester, year, faculty_id , time_slot, batch_list, constraints);
+        ELSE raise notice 'The timetable slot could not be found';
+        END IF;
+        ELSE raise notice 'The course % could not be found', cour_id;
+        END IF;
+END;$$
+
+
+--calling insert_course_offering
+
+
+CALL insert_course_offering('ge101', 1, 2021, 20, ARRAY[110, 210, 310], NULL, NULL);
+
+
+ CALL insert_course_offering('hs475', 1, 2021, 1, ARRAY[110, 210, 310], ARRAY[2019, 2018], NULL);
+
+
+CALL insert_course_offering('cs301', 1, 2021, 5, ARRAY[111, 211, 311], ARRAY[2019], NULL);
+
+
+CALL insert_course_offering('cs305', 1, 2021, 1, ARRAY[114,214,314], NULL, NULL);
+
+
+-- create student_table
+
+
+CREATE TABLE student_table(
+        stu_id        VARCHAR(6) NOT NULL PRIMARY KEY,
+        batch INTEGER NOT NULL);
+
+
+
+
+--entering a student in student_table
+ 
+CREATE OR REPLACE PROCEDURE student_entry(student_id         VARCHAR(6),
+        batch                    INTEGER
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+        INSERT INTO student_table(stu_id, batch) VALUES (student_id, batch);
+        EXECUTE format('
+        CREATE TABLE %I(
+                course_id         VARCHAR(6) NOT NULL PRIMARY KEY,
+                semester        INTEGER NOT NULL,
+                year                INTEGER NOT NULL,
+                grade                 INTEGER)', 't_' || student_id);
+        
+        EXECUTE format ('
+        CREATE USER %I WITH ENCRYPTED PASSWORD ''%I''',student_id, 'p_' || student_id);
+        EXECUTE format ('GRANT SELECT ON %I TO %I', 't_' || student_id, student_id);
+        EXECUTE format (‘GRANT INSERT(course_id, semester, year) ON %I TO %I', 't_' || student_id, student_id);
+        EXECUTE format ('GRANT SELECT ON course_offering TO %I', student_id);
+        EXECUTE format ('GRANT SELECT ON course_catalogue TO %I', student_id);
+EXECUTE format ('GRANT SELECT ON tickets_table TO %I', student_id);
+EXECUTE format ('GRANT INSERT(student _id, course_id, sem, year) ON tickets_table TO %I', student_id);
+EXECUTE format ('GRANT SELECT on student_table TO %I',student_id);
+ 
+END;$$
+
+
+
+
+CALL student_entry('ee1221', 2018);
+CALL student_entry('ch1001', 2020);
+CALL student_entry('antara', 2019);
+
+
+
+
+--grant all to dean_academics on student table
+ 
+GRANT ALL ON student_table TO dean_acads;
+
+
+
+
+// create time slot table
+
+
+CREATE TABLE time_table(
+        slot INTEGER[] NOT NULL PRIMARY KEY
+);
+
+
+-- procedure to uploadv time table by dean_acads
+
+
+CREATE PROCEDURE upload_time_slot(slot INTEGER[]
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+        INSERT INTO time_table(slot) VALUES(slot);
+END;$$
+
+
+--grant 
+GRANT ALL ON time_table TO dean_acads;
+
+
+-Call statement - 
+CALL upload_time_slot(ARRAY[114, 214, 314]);
+
+
+--checker
+
+
+CREATE OR REPLACE FUNCTION checker(s_id VARCHAR(6), 
+                                                        sem INTEGER, 
+year INTEGER, 
+this_credit INTEGER)
+RETURNS INTEGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+        bool_val INTEGER;
+        prev_sem1  INTEGER;
+        prev_sem2 INTEGER;
+        prev_year1 INTEGER;
+        prev_year2 INTEGER;
+        sem_credits_record record;
+sem_credits refcursor;
+curr_credits DECIMAL;
+sem_credits_record1 record;
+sem_credits1 refcursor;
+prev_credits1 DECIMAL;
+sem_credits_record2 record;
+sem_credits2 refcursor;
+prev_credits2 DECIMAL;
+ 
+BEGIN
+        IF(sem = 1)
+        THEN prev_sem1 = 2;
+prev_sem2 =1; 
+prev_year1 = year - 1;
+prev_year1 = year - 1;
+ 
+ELSE
+prev_sem1 = 1;
+prev_sem2=2;
+prev_year1 = year;
+prev_year2 = year-1;
+ 
+END IF;
+ 
+curr_credits = 0;
+OPEN sem_credits FOR EXECUTE ('SELECT cc.c
+                FROM ' || quote_ident('t_' || s_id) || ' t, course_catalogue cc
+                WHERE t.course_id = cc.course_id
+and t.semester = sem
+and t.year = year ');
+LOOP
+        fetch sem_credits into sem_credits_record;
+        exit when not found;
+        curr_credits = curr_credits + sem_credits_record.c;
+END LOOP;
+ 
+curr_credits = curr_credits + this_credit;
+ 
+prev_credits1 = 0;
+OPEN sem_credits1 FOR EXECUTE ('SELECT cc.c
+                FROM ' || quote_ident('t_' || s_id) || ' t, course_catalogue cc
+                WHERE t.course_id = cc.course_id
+and t.semester = prev_sem1
+and t.year = prev_year1 ');
+LOOP
+        fetch sem_credits1 into sem_credits_record1;
+        exit when not found;
+        prev_credits1 = prev_credits1 + sem_credits_record1.c;
+END LOOP;
+ 
+ 
+prev_credits2 = 0;
+OPEN sem_credits2 FOR EXECUTE ('SELECT cc.c
+                FROM ' || quote_ident('t_' || s_id) || ' t, course_catalogue cc
+                WHERE t.course_id = cc.course_id
+and t.semester = prev_sem2
+and t.year = prev_year2');
+LOOP
+        fetch sem_credits2 into sem_credits_record2;
+        exit when not found;
+        prev_credits2 = prev_credits2 + sem_credits_record2.c;
+END LOOP;
+ 
+IF(curr_credits >1.25* (prev_credits2 + prev_credits1)/2 )
+THEN
+bool_val = 0;
+ELSE
+bool_val = 1;
+END IF;
+ 
+RETURN bool_val;
+END;
+$$
+ 
+ 
+
+
+
+
+
+
+-- procedure to register students
+drop procedure student_registration;
+ 
+CREATE OR REPLACE PROCEDURE student_registration(
+        cour_id VARCHAR(6),
+        sem         INTEGER,
+        yea                INTEGER
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+        student_id VARCHAR(6);
+        arr VARCHAR[];
+        slot_arr INTEGER[];
+        bat_arr INTEGER[];
+        z INTEGER;
+        x varchar(6);
+        is_present INTEGER;
+        y INTEGER;
+        slot_same INTEGER;
+        stud_table VARCHAR(10);
+        cgpa DECIMAL;
+        credit INTEGER;
+        bool_var INTEGER;
+        bat INTEGER;
+        is_batch INTEGER;
+BEGIN
+ 
+        SELECT current_user INTO student_id;
+        
+        SELECT c.prereqs
+        INTO arr
+        FROM course_catalogue c
+        WHERE c.course_id = cour_id;
+        
+        SELECT co.batch_list
+        INTO bat_arr
+        FROM course_offering co
+        WHERE co.course_id = cour_id
+        and co.semester = sem
+        and co.year = yea;
+        
+        SELECT batch INTO bat FROM student_table s WHERE s.stu_id=student_id;
+ 
+        is_batch = 0;
+        is_present := 0;
+        slot_same := 0;
+        stud_table := 't_' || student_id;
+        
+        cgpa = calculate_cg(student_id);
+        
+        SELECT cc.c INTO credit FROM course_catalogue cc WHERE cc.course_id=cour_id;
+        
+        bool_var = checker(student_id, sem, yea, credit);
+        
+        IF (bat_arr IS NOT NULL)
+        THEN
+        FOREACH z IN ARRAY bat_arr
+                LOOP 
+                IF (z=bat)
+                THEN
+                is_batch = 1;
+                END IF;
+                END LOOP;
+        ELSE
+                is_batch = 1;
+        END IF;
+        
+        IF (arr IS NOT NULL)
+        THEN
+        FOREACH x IN ARRAY arr
+                LOOP 
+                EXECUTE Format ('SELECT count(*) FROM %I as tbl WHERE tbl.course_id= ''%I''', stud_table, x)
+                INTO is_present;
+                END LOOP;
+        END IF;
+ 
+        
+        IF NOT EXISTS(SELECT * FROM course_catalogue cc WHERE cc.course_id=cour_id)
+        THEN
+        raise notice 'The course % is not in course_catalogue', cour_id;
+        ELSE
+        IF EXISTS(SELECT * 
+                          FROM course_offering c 
+                          WHERE c.course_id = cour_id 
+                                          and c.semester = sem
+                                         and c.year = yea)
+                THEN 
+                IF(bool_var = 1)
+                THEN
+                IF (is_batch = 1)
+                THEN
+                IF EXISTS (SELECT * FROM course_offering c 
+                                          WHERE c.course_id = cour_id 
+                                          and c.semester = sem
+                                         and c.year = yea
+                                          and cgpa>=c.constraints)
+                THEN
+                IF (arr IS NOT NULL and is_present = 0)
+                THEN
+                raise notice 'The prerequistes of the course % are not fullfilled', cour_id;
+                ELSE
+                        SELECT time_slot
+                        INTO slot_arr
+                        FROM course_offering c
+                        WHERE c.course_id = cour_id
+                        and c.semester=sem
+                        and c.year=yea;
+                
+                        FOREACH y IN ARRAY slot_arr
+                                LOOP 
+                                EXECUTE Format ('SELECT count(*) 
+                                                                FROM 
+                                                                (SELECT *
+                                                                FROM %I st, course_offering co 
+                                                                WHERE st.course_id=co.course_id
+                                                                and st.semester=co.semester
+                                                                and st.year=co.year) as new_tbl
+                                                                WHERE %s = ANY(new_tbl.time_slot)' 
+                                                                , stud_table, y )
+                                INTO slot_same;
+                                IF (slot_same<>0)
+                                THEN
+                                        EXIT;
+                                END IF;
+                                END LOOP;
+                        
+                        IF (slot_same<>0)
+                        THEN
+                        raise notice 'The time slot cannot be same as of another course already taken';
+                        ELSE
+                        EXECUTE format('INSERT INTO %I(course_id, semester, year) 
+                                                VALUES (''%I'', %s, %s)', 't_' || student_id, cour_id, sem, yea);
+                        END IF;
+                END IF;
+        ELSE
+        raise notice 'CGPA constraint not cleared. CG should be greater than %s', cgpa;
+        END IF;
+        ELSE
+        raise notice 'batch not allowed';
+        END IF;
+        ELSE
+        raise notice 'credit limit exceeded';
+        END IF;
+        ELSE 
+        raise notice 'The course % is not offered in % sem % year', cour_id, sem, yea;
+        END IF; 
+        END IF;
+        
+END;$$
+
+
+
+
+ 
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+-- cgpa calculate procedure
+
+
+DROP PROCEDURE calculate_cg;
+
+
+CREATE OR REPLACE FUNCTION calculate_cg(s_id VARCHAR(6)
+)
+RETURNS DECIMAL
+LANGUAGE plpgsql
+AS $$        
+DECLARE
+        cg DECIMAL;
+BEGIN
+ 
+        EXECUTE format ('
+        SELECT ROUND(((sum(st.grade*cc.c)*1.0)/(sum(cc.c)*1.0))::numeric,2)
+        FROM %I as st, course_catalogue as cc 
+        WHERE cc.course_id=st.course_id and st.grade IS NOT NULL',   't_' || s_id)
+        INTO cg;
+        
+        RAISE NOTICE 'The cgpa of student with student ID % is %', s_id, cg;
+        
+        RETURN cg;
+        
+END;$$
+
+
+
+
+
+
+CALL calculate_cg('ch1001');
+
+
+
+
+
+
+
+
+
+
+-- create table for all the tickets
+
+
+CREATE TABLE tickets_table (
+        student_id        VARCHAR(6) NOT NULL,
+        course_id         VARCHAR(6) NOT NULL,
+        semester                INTEGER  NOT NULL,
+        year                        INTEGER  NOT NULL,
+        approval                VARCHAR(25),
+        PRIMARY KEY(student_id, course_id, semester, year)
+);
+
+
+
+
+
+
+
+
+-- procedure to insert in tickets_table by a student
+CREATE OR REPLACE PROCEDURE insert_ticket(course_id         VARCHAR(6),
+        semester                 INTEGER,
+        year                INTEGER
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+        stu_id VARCHAR(6);
+BEGIN
+        SELECT current_user INTO stu_id;
+        INSERT INTO ticket_table(student_id, course_id, semester, year) VALUES (stu_id, course_id, semester, year);
+END;$$
+
+
+
+
+
+
+--table to keep track of the faculty advisor of the batches
+
+
+CREATE TABLE faculty_advisor(
+        fac_id VARCHAR(6) NOT NULL,
+        batch INTEGER NOT NULL PRIMARY KEY
+);
+
+
+
+
+--insert procedure for faculty advisor
+
+
+CREATE OR REPLACE PROCEDURE insert_fac_advisor(fac_id VARCHAR(6),
+batch INTEGER
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+        INSERT INTO faculty_advisor(fac_id, batch) VALUES (fac_id, batch); 
+END; $$
+
+
+CALL insert_fac_advisor('f1', 2019);
+
+
+
+
+
+
+
+
+
+
+
+
+// create table for all the tickets
+
+
+CREATE TABLE tickets_table (
+        student_id        VARCHAR(6) NOT NULL,
+        course_id         VARCHAR(6) NOT NULL,
+        semester                INTEGER  NOT NULL,
+        year                        INTEGER  NOT NULL,
+        ins_app                 INTEGER,
+fa_app                         INTEGER, 
+dean_app                 INTEGER,
+        PRIMARY KEY(student_id, course_id, semester, year)
+);
+
+
+GRANT UPDATE on tickets_table TO dean_acads;
+
+
+CREATE TABLE faculty_advisor(
+        fac_id VARCHAR(6) NOT NULL,
+        batch INTEGER NOT NULL PRIMARY KEY
+);
+
+
+CREATE OR REPLACE PROCEDURE insert_fac_advisor(fac_id VARCHAR(6),
+batch INTEGER
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+        INSERT INTO faculty_advisor(fac_id, batch) VALUES (fac_id, batch); 
+END; $$
+
+
+
+
+GRANT ALL ON  faculty_advisor TO dean_acads;
+
+
+
+
+
+
+CALL insert_fac_advisor('f1', 2019);
+
+
+
+
+
+
+
+
+
+
+
+
+CREATE OR REPLACE PROCEDURE insert_ticket(course_id         VARCHAR(6),
+        semester                 INTEGER,
+        year                INTEGER
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+        stu_id VARCHAR(6);
+BEGIN
+        SELECT current_user INTO stu_id;
+        INSERT INTO tickets_table (student_id, course_id, semester, year) VALUES (stu_id, course_id, semester, year);
+END;$$
+
+
+
+
+
+
+
+
+
+
+CREATE TABLE dean_tickets_table (
+        student_id        VARCHAR(6) NOT NULL,
+        course_id         VARCHAR(6) NOT NULL,
+        semester                INTEGER  NOT NULL,
+        year                        INTEGER  NOT NULL,
+        credits                         INTEGER NOT NULL, 
+dean_app                 INTEGER,
+        PRIMARY KEY(student_id, course_id, semester, year)
+);
+
+
+CREATE OR REPLACE PROCEDURE insert_fac_advisor(fac_id VARCHAR(6),
+batch INTEGER
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+        INSERT INTO faculty_advisor(fac_id, batch) VALUES (fac_id, batch); 
+END; $$
+
+
+
+
+
+
+
+
+CREATE TABLE faculty_table (
+        faculty_id        VARCHAR(6) NOT NULL PRIMARY KEY
+);
+
+
+
+
+
+
+
+
+CREATE OR REPLACE PROCEDURE faculty_entry (faculty_id         VARCHAR(6) )
+LANGUAGE plpgsql
+AS $$
+BEGIN
+        INSERT INTO faculty_table (faculty_id) VALUES (faculty_id);
+        EXECUTE format('
+        CREATE TABLE %I(
+                student _id                 VARCHAR(6) NOT NULL, 
+                course_id                VARCHAR(6) NOT NULL, 
+                semester                 INTEGER NOT NULL, 
+                year                         INTEGER NOT NULL, 
+                credits                         INTEGER NOT NULL, 
+                if_faculty_advisor         INTEGER NOT NULL, 
+                ins_app                 INTEGER, 
+                PRIMARY KEY(student_id, course_id, semester, year,if_faculty_advisor)', 'f_' || faculty_id);
+        
+        EXECUTE format ('
+        CREATE USER %I WITH ENCRYPTED PASSWORD ''%I''',faculty_id, 'p_' || faculty_id);
+        EXECUTE format ('GRANT SELECT ON %I TO dean_acads', 'f_' || faculty_id);
+        EXECUTE format ('GRANT UPDATE, INSERT ON %I(student_id, course_id, semester, year, credits, if_faculty_advisor, ins_app) TO %I' , 'f_' || faculty_id, faculty_id);
+EXECUTE format ('GRANT SELECT ON %I TO %I' , 'f_' || faculty_id, faculty_id);
+        EXECUTE format ('GRANT SELECT ON course_catalogue TO %I', faculty_id);
+        EXECUTE format ('GRANT SELECT, INSERT ON course_offering TO %I', faculty_id);
+        EXECUTE format ('GRANT UPDATE on tickets_table TO %I', faculty_id);
+        
+        
+ 
+END;$$
+
+
+
+
+
+
+
+
+
+
+CREATE OR REPLACE PROCEDURE insert_in_ftable() 
+LANGUAGE PLPGSQL
+AS $$
+DECLARE
+fac_id VARCHAR(6);
+credit INTEGER;
+        
+BEGIN
+ 
+SELECT faculty_id 
+INTO fac_id
+FROM course_offering c 
+WHERE c.course_id=NEW.course_id 
+and c.semester = NEW.semester 
+and c.year=NEW.year ;
+ 
+SELECT c INTO credit
+FROM course_catalogue cc 
+WHERE cc.course_id=NEW.course_id;
+ 
+ 
+EXECUTE format('INSERT INTO %I(student _id, course_id,  semester, year, credits, if_faculty_advisor,  ins_app) VALUES( NEW.student_id, NEW.course_id, NEW.semester, NEW.year, credit, 0, NULL)', 'f_' || fac_id);
+ 
+END;
+$$
+
+
+
+
+
+
+CREATE OR REPLACE FUNCTION  insert_in_fad_table ()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+        CALL        insert_in_ftable();
+        CALL        insert_in_advisor_table();
+        CALL        insert_in_dean_table();
+END; $$
+
+
+
+
+
+
+CREATE TRIGGER trig_insert_tickets_table 
+   AFTER INSERT
+   ON tickets_table
+   FOR EACH ROW
+   EXECUTE PROCEDURE insert_in_fad_table();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+CREATE OR REPLACE PROCEDURE insert_in_advisor_table() 
+LANGUAGE PLPGSQL
+AS $$
+DECLARE
+advisor_id VARCHAR(6);
+credit INTEGER;
+bat INTEGER;
+is_present INTEGER;
+        
+BEGIN
+
+
+SELECT batch
+INTO bat
+FROM student_table s
+WHERE NEW.student_id = s.stu_id;
+
+
+SELECT faculty_id 
+INTO advisor_id 
+FROM faculty_advisor f
+WHERE f.batch = bat;
+
+
+SELECT c INTO credit
+FROM course_catalogue cc 
+WHERE cc.course_id=NEW.course_id;
+
+
+
+
+EXECUTE format('INSERT INTO %I(student _id, course_id,  semester, year, credits, if_faculty_advisor,  ins_app) VALUES( NEW.student_id, NEW.course_id, NEW.semester, NEW.year, credit, 1, NULL)', 'f_' || advisor_id);
+
+
+END;
+$$
+
+
+
+
+
+
+CREATE TRIGGER trig_insert_ftable 
+   AFTER UPDATE
+   ON tickets_table
+   FOR EACH ROW
+WHEN (OLD.ins_app IS DISTINCT FROM NEW.ins_app)
+   EXECUTE PROCEDURE insert_in_advisor_table();
+
+
+
+
+
+
+CREATE OR REPLACE PROCEDURE insert_in_dean_table() 
+ LANGUAGE PLPGSQL
+AS $$
+DECLARE
+credit INTEGER;
+is_present INTEGER;
+        
+BEGIN
+SELECT c INTO credit
+FROM course_catalogue cc 
+WHERE cc.course_id=NEW.course_id;
+
+
+INSERT INTO dean_tickets_table(student_id, course_id,  semester, year, credits, dean_app) VALUES( NEW.student_id, NEW.course_id, NEW.semester, NEW.year, credit, NULL);
+END;
+$$
+
+
+
+
+
+
+
+
+CREATE TRIGGER trig_insert_adv_table 
+   AFTER UPDATE
+   ON tickets_table
+   FOR EACH ROW
+WHEN (OLD.fa_app IS DISTINCT FROM NEW.fa_app)
+   EXECUTE PROCEDURE insert_in_dean_table();
+
+
+
+
+
+
+
+
+
+
+
+
+CREATE OR REPLACE PROCEDURE generate_transcript(student_id         VARCHAR(6))
+LANGUAGE plpgsql
+AS $$
+ 
+DECLARE
+transcript_record record;
+transcript refcursor;
+        
+BEGIN
+                OPEN transcript FOR EXECUTE ('SELECT t.course_id, t.semester, t.year, cc.c, t.grade 
+                FROM ' || quote_ident('t_' || student_id) || ' t, course_catalogue cc
+                WHERE t.course_id = cc.course_id');
+                LOOP
+                        fetch transcript into transcript_record;
+                        exit when not found;
+                        raise notice '%',transcript_record;
+                END LOOP;
+                CALL calculate_cg(student_id);
+END
+$$;
+ 
+CALL generate_transcript('antara');
+
+
+
+
+
+
+
+
+--import_csv procedure imports the grades with the attributes student_id and their grades
+-- grade_in_student_table procedure writes the grades in the individual student tables. It should be called after the import_csv procedure.
+CREATE OR REPLACE PROCEDURE import_csv(course_id        VARCHAR(6),
+                                                                                semester INTEGER,
+                                                                                year INTEGER,
+                                                                                path_of_file VARCHAR(100))
+LANGUAGE plpgsql
+AS $$
+        
+BEGIN
+EXECUTE format('
+        CREATE TABLE %I(
+                student_id        VARCHAR(6) NOT NULL PRIMARY KEY,
+                grade                 INTEGER NOT NULL)', course_id || '_' || semester || '_' || year);
+                
+EXECUTE FORMAT('COPY %I(student_id, grade)
+FROM ''' || path_of_file || '''
+DELIMITER '',''
+CSV HEADER', course_id || '_' || semester || '_' || year);
+ 
+ 
+END
+$$;
+ 
+CALL import_csv('hs475',1,2021,'C:\Users\Public\folder\myfile.csv');
+
+
+
+
+
+
+
+
+-- update_on_dean procedure is used to update the deans approval in the dean_ticcket_table and also in the dean column of the tickets_table
+
+
+CREATE OR REPLACE PROCEDURE update_on_dean(s_id VARCHAR(6), 
+c_id VARCHAR(6), 
+sem INTEGER, 
+year INTEGER,
+approval INTEGER)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+        UPDATE dean_tickets_table d
+        SET dean_app = approval
+WHERE d.student_id = s_id and
+d.course_id = c_id and
+d.semester = sem and
+d.year = year;
+
+
+UPDATE tickets_table tb
+        SET dean_app = approval
+WHERE tb.student_id = s_id and
+tb.course_id = c_id and
+tb.semester = sem and
+tb.year = year;
+
+
+IF (approval = 1)
+THEN
+        EXECUTE format('INSERT INTO %I(course_id, semester, year) 
+            VALUES (''%I'', %s, %s)', 't_' || s_id, c_id, sem, yea);
+END IF;
+
+
+END; $$
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+-- update_on_facultyprocedure is used to update the faculty approval in the ‘f_facultyid’ ticket table and also in the ins/fac column of the tickets_table
+
+
+
+
+CREATE OR REPLACE PROCEDURE update_on_faculty(s_id VARCHAR(6), 
+c_id VARCHAR(6), 
+sem INTEGER, 
+year INTEGER,
+approval INTEGER)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+        faculty_id VARCHAR(6);
+    faculty_table VARCHAR(10);
+BEGIN
+        SELECT current_user INTO faculty_id;
+        faculty_table := 'f_' || faculty_id;
+        EXECUTE format ('UPDATE %I d
+                                        SET ins_app = approval
+                             WHERE d.student_id = s_id and
+                           d.course_id = c_id and
+                           d.semester = sem and
+                           d.year = year', faculty_table);
+        EXECUTE format ('UPDATE %I d
+                                        SET ins_app = approval
+                            WHERE d.student_id = s_id and
+                           d.course_id = c_id and
+                           d.semester = sem and
+                           d.year = year', faculty_table);
+ 
+        IF EXISTS(SELECT * FROM faculty_table f
+                                WHERE f.if_faculty_advisor=0 and
+                                f.faculty_id = faculty_id and
+                                f.student_id =s_id and
+                                f.semester = sem and
+                                f.year= year)
+        THEN
+        UPDATE tickets_table tb
+        SET ins_app = approval
+                WHERE tb.student_id = s_id and
+                tb.course_id = c_id and
+                tb.semester = sem and
+                tb.year = year;
+        END IF;
+        IF EXISTS(SELECT * FROM faculty_table f
+                                WHERE f.if_faculty_advisor=1 and
+                                f.faculty_id = faculty_id and
+                                f.student_id =s_id and
+                                f.semester = sem and
+                                f.year= year)
+THEN
+        UPDATE tickets_table tb
+        SET fa_app= approval
+                WHERE tb.student_id = s_id and
+                tb.course_id = c_id and
+                tb.semester = sem and
+                tb.year = year;
+        END IF;
+ 
+END; $$
+
+
+
+
+
+
+-- grade_in_student_table procedure writes the grades in the individual student tables. It should be called after the import_csv procedure.
+CREATE OR REPLACE PROCEDURE grade_in_student_table(cour_id        VARCHAR(6),
+                                                semester INTEGER,
+                                                year INTEGER)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+grade_record  record;
+grades refcursor;
+stud_table VARCHAR(10);
+BEGIN
+        OPEN grades FOR EXECUTE ('SELECT * FROM ' || quote_ident(cour_id || '_' || semester || '_' || year));
+        LOOP
+                fetch grades into grade_record ;
+                exit when not found;
+                stud_table := 't_' || grade_record.student_id;
+                EXECUTE format ('UPDATE %I s
+                SET grade = %s
+                WHERE  s.course_id = ''%I''
+                and s.semester = %s
+                and s.year = %s', stud_table,grade_record.grade,cour_id,semester,year);
+
+
+        END LOOP;
+END
+$$;
+
+
+
+
+call grade_in_student_table('hs475', 1, 2021);
