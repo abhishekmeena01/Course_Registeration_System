@@ -1,1 +1,1 @@
-Course Registration System for students using SQL
+Course Registration System for students using PostgreSQL
